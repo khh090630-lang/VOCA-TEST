@@ -3,12 +3,16 @@ import pandas as pd
 import random
 from fpdf import FPDF
 import io
+from urllib.parse import quote  # 한글/공백 시트명 처리를 위해 추가
 
 # --- 1. 설정 및 데이터 로드 ---
 # 여기에 복사한 구글 시트 ID를 넣으세요
 SHEET_ID = '1VdVqTA33lWopMV-ExA3XUy36YAwS3fJleZvTNRQNeDM' 
 SHEET_NAME = 'JS_voca' # 시트 하단 탭 이름
-URL = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={SHEET_NAME}'
+
+# 한글 및 공백이 포함된 시트 이름을 안전하게 변환
+encoded_sheet_name = quote(SHEET_NAME)
+URL = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_sheet_name}'
 
 class VocaPDF(FPDF):
     def __init__(self):
@@ -91,8 +95,8 @@ try:
             pdf.cell(col_width, 10, text, border=0)
             if i % 2 == 0: pdf.ln(10)
 
-        # 다운로드 버튼
-        pdf_output = pdf.output(dest='S').encode('latin-1', 'ignore')
+        # --- 수정된 다운로드 버튼 부분 ---
+        pdf_output = pdf.output()  # 최신 fpdf2 방식에 맞게 수정
         st.download_button(
             label="📥 PDF 다운로드",
             data=pdf_output,
