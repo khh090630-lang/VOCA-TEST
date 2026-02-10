@@ -58,34 +58,42 @@ try:
             random.shuffle(quiz_items)
 
         pdf = VocaPDF()
+        # 자동 페이지 넘김으로 인한 잘림 방지 (하단 여백 15mm 설정)
+        pdf.set_auto_page_break(auto=True, margin=15)
         
         # 1페이지: 문제지
         pdf.add_page()
         pdf.set_font('Nanum', '', 12)
-        col_width = 90  # 한 칸의 너비
+        col_width = 90  
         
         for i, item in enumerate(quiz_items, 1):
             word, meaning, origin_no = item
             question = word if mode == "영단어 보고 뜻 쓰기" else meaning
             
-            # 현재 위치 저장
+            # 페이지 끝에 도달했는지 확인 (새 페이지 생성)
+            if pdf.get_y() > 250:
+                pdf.add_page()
+                pdf.set_font('Nanum', '', 12)
+
             curr_x = pdf.get_x()
             curr_y = pdf.get_y()
             
-            # 질문 출력 (첫 번째 줄)
-            pdf.cell(col_width, 8, f"({origin_no}) {question}", ln=0)
+            # 1. 질문 출력
+            pdf.cell(col_width, 7, f"({origin_no}) {question}", ln=0)
             
-            # 밑줄 출력 (질문 바로 아래 줄)
-            pdf.set_xy(curr_x, curr_y + 8)
-            pdf.cell(col_width, 8, "Ans: ____________________", ln=0)
+            # 2. 밑줄 출력 (질문 바로 아래 7mm 지점)
+            pdf.set_xy(curr_x, curr_y + 7)
+            pdf.set_font('Nanum', '', 10) # 밑줄 안내 문구는 살짝 작게
+            pdf.cell(col_width, 7, "Ans: ____________________", ln=0)
+            pdf.set_font('Nanum', '', 12) # 다시 원래 크기로
             
-            # 다음 단어 배치를 위한 위치 조정
+            # 3. 다음 위치 설정
             if i % 2 == 0:
-                # 짝수 번째 단어면 다음 줄로
-                pdf.ln(15)
+                # 짝수번째면 다음 줄로 (세로 간격 확보)
+                pdf.set_xy(pdf.l_margin, curr_y + 18)
             else:
-                # 홀수 번째 단어면 옆 칸으로 이동하고 높이는 다시 위로
-                pdf.set_xy(curr_x + col_width + 5, curr_y)
+                # 홀수번째면 오른쪽 열로 이동하되 높이는 유지
+                pdf.set_xy(curr_x + col_width + 10, curr_y)
         
         # 2페이지: 정답지
         pdf.add_page()
@@ -100,15 +108,13 @@ try:
             
             curr_x = pdf.get_x()
             curr_y = pdf.get_y()
-            
             pdf.cell(col_width, 10, f"({origin_no}) {answer}", border=0)
             
             if i % 2 == 0:
                 pdf.ln(10)
             else:
-                pdf.set_xy(curr_x + col_width + 5, curr_y)
+                pdf.set_xy(curr_x + col_width + 10, curr_y)
 
-        # --- 핵심 수정 부분: bytearray를 bytes로 변환 ---
         pdf_output = bytes(pdf.output()) 
         
         st.download_button(
@@ -119,4 +125,4 @@ try:
         )
 
 except Exception as e:
-    st.error(f"데이터를 불러오지 못했습니다. ID와 공유 설정을 확인하세요! \n에러: {e}")
+    st.error(f"데이터를 불러오지 못했습니다. 에러: {e}")
