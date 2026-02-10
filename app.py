@@ -15,7 +15,7 @@ class VocaPDF(FPDF):
         super().__init__()
         # 한글 폰트 등록 (파일이 같은 경로에 있어야 함)
         try:
-            self.add_font('Nanum', '', 'NanumGothic.ttf', uni=True)
+            self.add_font('Nanum', '', 'NanumGothic.otf', uni=True)
         except:
             pass
 
