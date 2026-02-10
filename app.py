@@ -3,21 +3,18 @@ import pandas as pd
 import random
 from fpdf import FPDF
 import io
-from urllib.parse import quote  # 한글/공백 시트명 처리를 위해 추가
+from urllib.parse import quote
 
 # --- 1. 설정 및 데이터 로드 ---
-# 여기에 복사한 구글 시트 ID를 넣으세요
 SHEET_ID = '1VdVqTA33lWopMV-ExA3XUy36YAwS3fJleZvTNRQNeDM' 
-SHEET_NAME = 'JS_voca' # 시트 하단 탭 이름
+SHEET_NAME = 'JS_voca' 
 
-# 한글 및 공백이 포함된 시트 이름을 안전하게 변환
 encoded_sheet_name = quote(SHEET_NAME)
 URL = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_sheet_name}'
 
 class VocaPDF(FPDF):
     def __init__(self):
         super().__init__()
-        # 한글 폰트 등록 (파일이 같은 경로에 있어야 함)
         try:
             self.add_font('Nanum', '', 'NanumGothic.otf', uni=True)
         except:
@@ -32,7 +29,6 @@ class VocaPDF(FPDF):
 @st.cache_data
 def get_data():
     df = pd.read_csv(URL)
-    # 필요한 열만 추출 (첫 번째 열: 영어, 두 번째 열: 뜻 가정)
     df = df.iloc[:, [0, 1]] 
     df.columns = ['Word', 'Meaning']
     return df
@@ -54,17 +50,13 @@ try:
     shuffle = st.sidebar.checkbox("단어 순서 무작위로 섞기", value=True)
 
     if st.button("📄 PDF 시험지 생성하기"):
-        # 범위 선택 (사용자 입력 번호는 1번부터 시작하지만 인덱스는 0부터)
         selected_df = df.iloc[start_num-1 : end_num].copy()
-        
-        # 실제 시트상의 번호(행 번호) 추가
         selected_df['Original_No'] = range(start_num, end_num + 1)
         
         quiz_items = selected_df.values.tolist()
         if shuffle:
             random.shuffle(quiz_items)
 
-        # PDF 제작
         pdf = VocaPDF()
         
         # 1페이지: 문제지
@@ -95,8 +87,9 @@ try:
             pdf.cell(col_width, 10, text, border=0)
             if i % 2 == 0: pdf.ln(10)
 
-        # --- 수정된 다운로드 버튼 부분 ---
-        pdf_output = pdf.output()  # 최신 fpdf2 방식에 맞게 수정
+        # --- 핵심 수정 부분: bytearray를 bytes로 변환 ---
+        pdf_output = bytes(pdf.output()) 
+        
         st.download_button(
             label="📥 PDF 다운로드",
             data=pdf_output,
