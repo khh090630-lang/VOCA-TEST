@@ -28,15 +28,11 @@ class VocaPDF(FPDF):
         self.ln(5)
 
 # --- 2. 데이터 불러오기 함수 ---
-# 캐시가 꼬이는 것을 방지하기 위해 설정을 추가했습니다.
 @st.cache_data(show_spinner="단어장을 불러오는 중입니다...", ttl=600)
 def get_data():
-    # 데이터를 읽어올 때 제목 행이 없더라도 에러가 나지 않도록 처리
     df = pd.read_csv(URL)
-    # 첫 번째, 두 번째 열만 선택
     df = df.iloc[:, [0, 1]] 
     df.columns = ['Word', 'Meaning']
-    # 혹시 모를 빈 줄 제거
     df = df.dropna(subset=['Word'])
     return df
 
@@ -50,7 +46,6 @@ try:
     total_count = len(df)
     
     st.sidebar.header("⚙️ 시험지 설정")
-    # 시작 번호와 끝 번호의 최댓값을 total_count로 자동 설정
     start_num = st.sidebar.number_input("시작 번호", min_value=1, max_value=total_count, value=1)
     end_num = st.sidebar.number_input("끝 번호", min_value=1, max_value=total_count, value=min(50, total_count))
     
@@ -100,7 +95,7 @@ try:
                 else:
                     pdf.set_xy(curr_x + col_width + 10, curr_y)
             
-            # 2페이지: 정답지
+            # 2페이지: 정답지 (수정된 로직)
             pdf.add_page()
             pdf.set_font('Nanum', '', 14)
             pdf.cell(0, 10, "정답지 (Answer Key)", ln=True, align='C')
@@ -111,14 +106,21 @@ try:
                 word, meaning, origin_no = item
                 answer = meaning if mode == "영단어 보고 뜻 쓰기" else word
                 
+                # 페이지 끝에 도달하면 새 페이지 추가
+                if pdf.get_y() > 270:
+                    pdf.add_page()
+                    pdf.set_font('Nanum', '', 11)
+
                 curr_x = pdf.get_x()
                 curr_y = pdf.get_y()
-                pdf.cell(col_width, 10, f"({origin_no}) {answer}", border=0)
+                
+                # 한 줄에 2개씩 배치
+                pdf.cell(col_width, 8, f"({origin_no}) {answer}", border=0)
                 
                 if i % 2 == 0:
-                    pdf.ln(10)
+                    pdf.set_xy(pdf.l_margin, curr_y + 8) # 줄바꿈 시 y값만 명확히 증가
                 else:
-                    pdf.set_xy(curr_x + col_width + 10, curr_y)
+                    pdf.set_xy(curr_x + col_width + 10, curr_y) # 옆 칸으로 이동
 
             # 출력 스트림 처리
             pdf_output = pdf.output()
@@ -131,4 +133,4 @@ try:
             )
 
 except Exception as e:
-    st.error(f"데이터를 불러오지 못했습니다. 구글 시트의 '링크가 있는 모든 사용자-뷰어' 설정과 시트 이름을 확인하세요. 에러: {e}")
+    st.error(f"데이터를 불러오지 못했습니다. 에러: {e}")
