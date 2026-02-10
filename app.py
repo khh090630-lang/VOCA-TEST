@@ -25,7 +25,6 @@ class VocaPDF(FPDF):
         self.cell(0, 10, 'English Vocabulary Test', ln=True, align='C')
         self.ln(5)
 
-# --- 2. 데이터 불러오기 함수 ---
 @st.cache_data
 def get_data():
     df = pd.read_csv(URL)
@@ -33,10 +32,8 @@ def get_data():
     df.columns = ['Word', 'Meaning']
     return df
 
-# --- 3. UI 구성 ---
 st.set_page_config(page_title="Voca PDF Generator", page_icon="📝")
 st.title("📝 나만의 단어 시험지 생성기")
-st.info("구글 스프레드시트의 2행부터 1번 단어로 인식합니다.")
 
 try:
     df = get_data()
@@ -58,38 +55,57 @@ try:
             random.shuffle(quiz_items)
 
         pdf = VocaPDF()
-        
+        col_width = 95 # 페이지 절반 너비 (A4 기준 약 190mm)
+
         # 1페이지: 문제지
         pdf.add_page()
-        pdf.set_font('Nanum', '', 12)
-        col_width = 90
+        pdf.set_font('Nanum', '', 11)
         
         for i, item in enumerate(quiz_items, 1):
             word, meaning, origin_no = item
             question = word if mode == "영단어 보고 뜻 쓰기" else meaning
-            text = f"({origin_no}) {question} : ________________"
             
-            pdf.cell(col_width, 10, text, border=0)
-            if i % 2 == 0: pdf.ln(10)
-        
+            # 질문 텍스트가 너무 길 경우 자르기 (너비 침범 방지)
+            if len(question) > 20: 
+                display_text = f"({origin_no}) {question[:18]}.."
+            else:
+                display_text = f"({origin_no}) {question}"
+            
+            # 현재 위치 저장
+            curr_x = pdf.get_x()
+            curr_y = pdf.get_y()
+
+            # 질문 출력 (너비 고정)
+            pdf.cell(col_width, 10, f"{display_text} : ____________________", border=0)
+            
+            # 2열 배치 로직
+            if i % 2 == 0:
+                pdf.ln(12) # 줄바꿈
+            else:
+                pdf.set_xy(curr_x + col_width, curr_y) # 옆 칸으로 이동
+
         # 2페이지: 정답지
         pdf.add_page()
         pdf.set_font('Nanum', '', 14)
         pdf.cell(0, 10, "정답지 (Answer Key)", ln=True, align='C')
         pdf.ln(5)
-        pdf.set_font('Nanum', '', 11)
+        pdf.set_font('Nanum', '', 10)
         
         for i, item in enumerate(quiz_items, 1):
             word, meaning, origin_no = item
             answer = meaning if mode == "영단어 보고 뜻 쓰기" else word
-            text = f"({origin_no}) {answer}"
             
-            pdf.cell(col_width, 10, text, border=0)
-            if i % 2 == 0: pdf.ln(10)
+            curr_x = pdf.get_x()
+            curr_y = pdf.get_y()
+            
+            pdf.cell(col_width, 10, f"({origin_no}) {answer}", border=0)
+            
+            if i % 2 == 0:
+                pdf.ln(10)
+            else:
+                pdf.set_xy(curr_x + col_width, curr_y)
 
-        # --- 핵심 수정 부분: bytearray를 bytes로 변환 ---
         pdf_output = bytes(pdf.output()) 
-        
         st.download_button(
             label="📥 PDF 다운로드",
             data=pdf_output,
@@ -98,4 +114,4 @@ try:
         )
 
 except Exception as e:
-    st.error(f"데이터를 불러오지 못했습니다. ID와 공유 설정을 확인하세요! \n에러: {e}")
+    st.error(f"에러 발생: {e}")
