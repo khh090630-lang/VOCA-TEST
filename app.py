@@ -7,7 +7,7 @@ import io
 # --- 1. 설정 및 데이터 로드 ---
 # 여기에 복사한 구글 시트 ID를 넣으세요
 SHEET_ID = '1VdVqTA33lWopMV-ExA3XUy36YAwS3fJleZvTNRQNeDM' 
-SHEET_NAME = '조정식 voca' # 시트 하단 탭 이름
+SHEET_NAME = '조정식_voca' # 시트 하단 탭 이름
 URL = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={SHEET_NAME}'
 
 class VocaPDF(FPDF):
