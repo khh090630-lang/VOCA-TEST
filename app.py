@@ -5,7 +5,7 @@ from fpdf import FPDF
 import io
 from urllib.parse import quote
 import streamlit_authenticator as stauth
-import bcrypt # 비밀번호 암호화를 직접 처리하기 위해 추가
+import bcrypt
 
 # --- 1. 설정 및 데이터 로드 ---
 SHEET_ID = '1VdVqTA33lWopMV-ExA3XUy36YAwS3fJleZvTNRQNeDM'
@@ -41,7 +41,7 @@ names = ["사용자1"]
 usernames = ["user1"]
 passwords = ["1234"]
 
-# [수정] 라이브러리 버전 충돌 방지를 위해 bcrypt로 직접 암호화 (가장 안전한 방법)
+# bcrypt를 이용한 안전한 해싱
 hashed_passwords = [bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8') for password in passwords]
 
 credentials = {
@@ -53,6 +53,7 @@ credentials = {
     }
 }
 
+# 인증 객체 생성
 authenticator = stauth.Authenticate(
     credentials,
     "voca_cookie",
@@ -63,13 +64,14 @@ authenticator = stauth.Authenticate(
 # --- 4. 로그인 및 UI 구성 ---
 st.set_page_config(page_title="Voca PDF Generator", page_icon="📝")
 
-# 로그인 화면 호출
-name, authentication_status, username = authenticator.login('main')
+# [수정된 부분] 최신 버전에서는 login 호출 시 반환값을 처리하는 방식이 달라졌습니다.
+# 안전하게 객체 내부 상태를 사용하는 방식으로 변경합니다.
+authenticator.login()
 
-if authentication_status:
+if st.session_state["authentication_status"]:
     # 로그인 성공 시
     authenticator.logout('Logout', 'sidebar')
-    st.title(f"📝 {name}님의 단어 시험지 생성기")
+    st.title(f"📝 {st.session_state['name']}님의 단어 시험지 생성기")
     st.info("구글 스프레드시트의 2,000단어 데이터를 연동합니다.")
 
     try:
@@ -161,7 +163,7 @@ if authentication_status:
     except Exception as e:
         st.error(f"데이터를 불러오지 못했습니다. 에러: {e}")
 
-elif authentication_status is False:
+elif st.session_state["authentication_status"] is False:
     st.error('사용자 이름 또는 비밀번호가 틀렸습니다.')
-elif authentication_status is None:
+elif st.session_state["authentication_status"] is None:
     st.warning('로그인이 필요합니다.')
