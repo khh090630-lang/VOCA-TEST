@@ -16,25 +16,26 @@ URL = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sh
 class VocaPDF(FPDF):
     def __init__(self):
         super().__init__()
-        # 폰트 파일 존재 여부 확인 (디버깅용)
-        font_file = 'NanumGothic.otf'
+        # 폰트 파일 존재 여부 확인
+        font_file = 'NanumGothic.otf' 
         if not os.path.exists(font_file):
              st.error(f"❌ 폰트 파일을 찾을 수 없습니다: {font_file} 파일이 app.py와 같은 폴더에 있는지 확인하세요.")
         
         try:
-            # 이름을 'Nanum'으로 등록
-            self.add_font('Nanum', '', font_file, uni=True)
+            # [수정됨] fpdf2 방식: uni=True 옵션 제거, style='' 명시, fname 사용
+            # fpdf2는 OTF 파일도 지원하며, 유니코드를 자동으로 처리합니다.
+            self.add_font('Nanum', style='', fname=font_file)
         except Exception as e:
             st.error(f"❌ 폰트 등록 중 오류 발생: {e}")
 
     def header(self):
-        # 등록된 이름 'Nanum' 사용
         try:
-            self.set_font('Nanum', '', 16)
+            # [수정됨] fpdf2 권장: size 파라미터 명시
+            self.set_font('Nanum', size=16)
             self.cell(0, 10, 'English Vocabulary Test', ln=True, align='C')
             self.ln(5)
         except:
-            self.set_font('Arial', 'B', 16)
+            self.set_font('Helvetica', 'B', 16) # 기본 폰트로 대체
 
 # --- 2. 데이터 불러오기 함수 ---
 @st.cache_data(show_spinner="단어장을 불러오는 중입니다...", ttl=600)
@@ -76,7 +77,7 @@ try:
             
             # 1페이지: 문제지
             pdf.add_page()
-            pdf.set_font('Nanum', '', 12) # 여기서 소문자 nanum이 아닌지 확인!
+            pdf.set_font('Nanum', size=12) # fpdf2 문법 적용
             col_width = 90  
             
             for i, item in enumerate(quiz_items, 1):
@@ -85,16 +86,16 @@ try:
                 
                 if pdf.get_y() > 250:
                     pdf.add_page()
-                    pdf.set_font('Nanum', '', 12)
+                    pdf.set_font('Nanum', size=12)
 
                 curr_x = pdf.get_x()
                 curr_y = pdf.get_y()
                 
                 pdf.cell(col_width, 7, f"({origin_no}) {question}", ln=0)
                 pdf.set_xy(curr_x, curr_y + 7)
-                pdf.set_font('Nanum', '', 10)
+                pdf.set_font('Nanum', size=10)
                 pdf.cell(col_width, 7, "Ans: ____________________", ln=0)
-                pdf.set_font('Nanum', '', 12)
+                pdf.set_font('Nanum', size=12)
                 
                 if i % 2 == 0:
                     pdf.set_xy(pdf.l_margin, curr_y + 18)
@@ -103,10 +104,10 @@ try:
             
             # 2페이지: 정답지
             pdf.add_page()
-            pdf.set_font('Nanum', '', 14)
+            pdf.set_font('Nanum', size=14)
             pdf.cell(0, 10, "정답지 (Answer Key)", ln=True, align='C')
             pdf.ln(5)
-            pdf.set_font('Nanum', '', 11)
+            pdf.set_font('Nanum', size=11)
             
             for i, item in enumerate(quiz_items, 1):
                 word, meaning, origin_no = item
@@ -114,7 +115,7 @@ try:
                 
                 if pdf.get_y() > 270:
                     pdf.add_page()
-                    pdf.set_font('Nanum', '', 11)
+                    pdf.set_font('Nanum', size=11)
 
                 curr_x = pdf.get_x()
                 curr_y = pdf.get_y()
@@ -125,10 +126,12 @@ try:
                 else:
                     pdf.set_xy(curr_x + col_width + 10, curr_y)
 
-            pdf_output = pdf.output()
+            # fpdf2의 output()은 bytearray를 반환합니다.
+            pdf_bytes = bytes(pdf.output())
+            
             st.download_button(
                 label="📥 PDF 다운로드",
-                data=bytes(pdf_output),
+                data=pdf_bytes,
                 file_name=f"voca_test_{start_num}_{end_num}.pdf",
                 mime="application/pdf"
             )
