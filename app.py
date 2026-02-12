@@ -5,6 +5,7 @@ from fpdf import FPDF
 import io
 from urllib.parse import quote
 import streamlit_authenticator as stauth
+import bcrypt # 비밀번호 암호화를 직접 처리하기 위해 추가
 
 # --- 1. 설정 및 데이터 로드 ---
 SHEET_ID = '1VdVqTA33lWopMV-ExA3XUy36YAwS3fJleZvTNRQNeDM'
@@ -35,21 +36,23 @@ def get_data():
     df = df.dropna(subset=['Word'])
     return df
 
-# --- 3. 로그인 설정 (최신 버전 v0.3.x 대응) ---
-# 비밀번호를 미리 해싱해서 구조를 만듭니다.
-passwords_to_hash = ['1234']
-hashed_passwords = stauth.Hasher(passwords_to_hash).generate()
+# --- 3. 로그인 설정 ---
+names = ["사용자1"]
+usernames = ["user1"]
+passwords = ["1234"]
+
+# [수정] 라이브러리 버전 충돌 방지를 위해 bcrypt로 직접 암호화 (가장 안전한 방법)
+hashed_passwords = [bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8') for password in passwords]
 
 credentials = {
     "usernames": {
-        "user1": {
-            "name": "사용자1",
+        usernames[0]: {
+            "name": names[0],
             "password": hashed_passwords[0]
         }
     }
 }
 
-# 인증 객체 생성
 authenticator = stauth.Authenticate(
     credentials,
     "voca_cookie",
@@ -61,7 +64,6 @@ authenticator = stauth.Authenticate(
 st.set_page_config(page_title="Voca PDF Generator", page_icon="📝")
 
 # 로그인 화면 호출
-# 최신 버전은 login 메서드의 인자가 (label, location) 순서입니다.
 name, authentication_status, username = authenticator.login('main')
 
 if authentication_status:
