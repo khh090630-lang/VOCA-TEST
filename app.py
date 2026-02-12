@@ -4,28 +4,36 @@ import random
 from fpdf import FPDF
 import io
 from urllib.parse import quote
+import os
 
 # --- 1. 설정 및 데이터 로드 ---
 SHEET_ID = '1VdVqTA33lWopMV-ExA3XUy36YAwS3fJleZvTNRQNeDM'
 SHEET_NAME = 'JS_voca' 
 
 encoded_sheet_name = quote(SHEET_NAME)
-# 중요: &range=A1:B2001 을 추가하여 2000번 단어까지 강제로 읽어옵니다.
 URL = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_sheet_name}&range=A1:B2001'
+
 
 class VocaPDF(FPDF):
     def __init__(self):
         super().__init__()
+        self.font_loaded = False
         try:
-            # 폰트 파일명이 나눔고딕.otf 라면 이름을 맞춰주세요.
-            self.add_font('Nanum', '', 'NanumGothic.otf', uni=True)
-        except:
-            pass
+            font_path = os.path.join(os.path.dirname(__file__), "NanumGothic.otf")
+            self.add_font('Nanum', '', font_path, uni=True)
+            self.font_loaded = True
+        except Exception as e:
+            print("폰트 로드 실패:", e)
 
     def header(self):
-        self.set_font('Nanum', '', 16)
+        if self.font_loaded:
+            self.set_font('Nanum', '', 16)
+        else:
+            self.set_font('Arial', '', 16)
+
         self.cell(0, 10, 'English Vocabulary Test', ln=True, align='C')
         self.ln(5)
+
 
 # --- 2. 데이터 불러오기 함수 ---
 @st.cache_data(show_spinner="단어장을 불러오는 중입니다...", ttl=600)
@@ -35,6 +43,7 @@ def get_data():
     df.columns = ['Word', 'Meaning']
     df = df.dropna(subset=['Word'])
     return df
+
 
 # --- 3. UI 구성 ---
 st.set_page_config(page_title="Voca PDF Generator", page_icon="📝")
@@ -70,7 +79,11 @@ try:
             
             # 1페이지: 문제지
             pdf.add_page()
-            pdf.set_font('Nanum', '', 12)
+            if pdf.font_loaded:
+                pdf.set_font('Nanum', '', 12)
+            else:
+                pdf.set_font('Arial', '', 12)
+
             col_width = 90  
             
             for i, item in enumerate(quiz_items, 1):
@@ -79,52 +92,72 @@ try:
                 
                 if pdf.get_y() > 250:
                     pdf.add_page()
-                    pdf.set_font('Nanum', '', 12)
+                    if pdf.font_loaded:
+                        pdf.set_font('Nanum', '', 12)
+                    else:
+                        pdf.set_font('Arial', '', 12)
 
                 curr_x = pdf.get_x()
                 curr_y = pdf.get_y()
                 
                 pdf.cell(col_width, 7, f"({origin_no}) {question}", ln=0)
                 pdf.set_xy(curr_x, curr_y + 7)
-                pdf.set_font('Nanum', '', 10)
+
+                if pdf.font_loaded:
+                    pdf.set_font('Nanum', '', 10)
+                else:
+                    pdf.set_font('Arial', '', 10)
+
                 pdf.cell(col_width, 7, "Ans: ____________________", ln=0)
-                pdf.set_font('Nanum', '', 12)
+
+                if pdf.font_loaded:
+                    pdf.set_font('Nanum', '', 12)
+                else:
+                    pdf.set_font('Arial', '', 12)
                 
                 if i % 2 == 0:
                     pdf.set_xy(pdf.l_margin, curr_y + 18)
                 else:
                     pdf.set_xy(curr_x + col_width + 10, curr_y)
             
-            # 2페이지: 정답지 (수정된 로직)
+            # 2페이지: 정답지
             pdf.add_page()
-            pdf.set_font('Nanum', '', 14)
+            if pdf.font_loaded:
+                pdf.set_font('Nanum', '', 14)
+            else:
+                pdf.set_font('Arial', '', 14)
+
             pdf.cell(0, 10, "정답지 (Answer Key)", ln=True, align='C')
             pdf.ln(5)
-            pdf.set_font('Nanum', '', 11)
+
+            if pdf.font_loaded:
+                pdf.set_font('Nanum', '', 11)
+            else:
+                pdf.set_font('Arial', '', 11)
             
             for i, item in enumerate(quiz_items, 1):
                 word, meaning, origin_no = item
                 answer = meaning if mode == "영단어 보고 뜻 쓰기" else word
                 
-                # 페이지 끝에 도달하면 새 페이지 추가
                 if pdf.get_y() > 270:
                     pdf.add_page()
-                    pdf.set_font('Nanum', '', 11)
+                    if pdf.font_loaded:
+                        pdf.set_font('Nanum', '', 11)
+                    else:
+                        pdf.set_font('Arial', '', 11)
 
                 curr_x = pdf.get_x()
                 curr_y = pdf.get_y()
                 
-                # 한 줄에 2개씩 배치
                 pdf.cell(col_width, 8, f"({origin_no}) {answer}", border=0)
                 
                 if i % 2 == 0:
-                    pdf.set_xy(pdf.l_margin, curr_y + 8) # 줄바꿈 시 y값만 명확히 증가
+                    pdf.set_xy(pdf.l_margin, curr_y + 8)
                 else:
-                    pdf.set_xy(curr_x + col_width + 10, curr_y) # 옆 칸으로 이동
+                    pdf.set_xy(curr_x + col_width + 10, curr_y)
 
-            # 출력 스트림 처리
             pdf_output = pdf.output()
-            
+
             st.download_button(
                 label="📥 PDF 다운로드",
                 data=bytes(pdf_output),
