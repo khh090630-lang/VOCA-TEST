@@ -11,12 +11,14 @@ SHEET_ID = '1VdVqTA33lWopMV-ExA3XUy36YAwS3fJleZvTNRQNeDM'
 SHEET_NAME = 'JS_voca' 
 
 encoded_sheet_name = quote(SHEET_NAME)
+# 중요: &range=A1:B2001 을 추가하여 2000번 단어까지 강제로 읽어옵니다.
 URL = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_sheet_name}&range=A1:B2001'
 
 class VocaPDF(FPDF):
     def __init__(self):
         super().__init__()
         try:
+            # 폰트 파일명이 나눔고딕.otf 라면 이름을 맞춰주세요.
             self.add_font('Nanum', '', 'NanumGothic.otf', uni=True)
         except:
             pass
@@ -36,13 +38,13 @@ def get_data():
     return df
 
 # --- 3. 로그인 설정 ---
-# 테스트용 사용자 정보 (상용화 시 해싱된 비밀번호 사용 권장)
+# 테스트용 사용자 정보
 names = ["사용자1"]
 usernames = ["user1"]
 passwords = ["1234"] # 초기 비밀번호
 
-# 비밀번호 해싱 처리
-hashed_passwords = stauth.Hasher(passwords).generate()
+# 비밀번호 해싱 처리 (최신 라이브러리 버전 대응: generate() -> hash())
+hashed_passwords = stauth.Hasher(passwords).hash(passwords)
 
 credentials = {
     "usernames": {
