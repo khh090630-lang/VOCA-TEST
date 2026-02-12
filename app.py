@@ -43,11 +43,11 @@ def get_data(sheet_name):
         df.columns = ['No', 'Word', 'Meaning']
         df = df.dropna(subset=['Word'])
         df['No'] = pd.to_numeric(df['No'], errors='coerce')
+        # 번호 순서대로 정렬 (사용자 요청 반영)
         df = df.sort_values(by='No').reset_index(drop=True)
         return df
     except Exception as e:
-        # 데이터가 없을 때 상세 이유 출력
-        st.error(f"데이터를 읽어오지 못했습니다 ({sheet_name}): {e}")
+        st.error(f"데이터 로드 실패 ({sheet_name}): {e}")
         return pd.DataFrame(columns=['No', 'Word', 'Meaning'])
 
 # --- 2. UI 구성 ---
@@ -88,8 +88,9 @@ try:
         df = get_data(target_sheet)
 
     if df.empty:
-        st.warning(f"'{target_sheet}' 시트에 유효한 데이터가 없습니다. (공유 설정을 확인하세요)")
+        st.warning(f"'{target_sheet}' 시트에 유효한 데이터가 없습니다. 공유 설정을 확인해주세요.")
     else:
+        # 실제 데이터의 번호 범위 추출
         all_nos = df['No'].dropna().unique()
         min_no = int(min(all_nos))
         max_no = int(max(all_nos))
@@ -98,8 +99,9 @@ try:
         start_range = st.sidebar.number_input("시작 번호", min_value=min_no, max_value=max_no, value=min_no)
         end_range = st.sidebar.number_input("끝 번호", min_value=min_no, max_value=max_no, value=max_no)
 
+        # 번호 기준 필터링 (iloc 에러 방지)
         filtered_df = df[(df['No'] >= start_range) & (df['No'] <= end_range)]
-        st.info(f"선택 범위 내 단어 수: **{len(filtered_df)}**개")
+        st.info(f"선택 범위({start_range}~{end_range}) 내 단어 수: **{len(filtered_df)}**개")
 
         mode = st.sidebar.radio("시험 유형", ["영단어 보고 뜻 쓰기", "뜻 보고 영어 쓰기"])
         shuffle = st.sidebar.checkbox("무작위 섞기", value=True)
@@ -121,35 +123,52 @@ try:
                 for i, item in enumerate(quiz_items, 1):
                     no, word, meaning = item
                     question = word if mode == "영단어 보고 뜻 쓰기" else meaning
+                    
                     if pdf.get_y() > 250:
                         pdf.add_page()
                         pdf.set_font('Nanum', '', 12)
+                    
                     cx, cy = pdf.get_x(), pdf.get_y()
                     pdf.cell(col_width, 7, f"({int(no)}) {question}")
                     pdf.set_xy(cx, cy + 7)
                     pdf.set_font('Nanum', '', 10)
                     pdf.cell(col_width, 7, "Ans: ____________________")
                     pdf.set_font('Nanum', '', 12)
+                    
                     if i % 2 == 0: pdf.set_xy(pdf.l_margin, cy + 18)
                     else: pdf.set_xy(cx + col_width + 10, cy)
                 
                 # 2페이지: 정답지
                 pdf.add_page()
-                pdf.set_font('Nanum', '', 14); pdf.cell(0, 10, "정답지 (Answer Key)", ln=True, align='C'); pdf.ln(5)
+                pdf.set_font('Nanum', '', 14)
+                pdf.cell(0, 10, "정답지 (Answer Key)", ln=True, align='C')
+                pdf.ln(5)
                 pdf.set_font('Nanum', '', 11)
                 for i, item in enumerate(quiz_items, 1):
                     no, word, meaning = item
                     answer = meaning if mode == "영단어 보고 뜻 쓰기" else word
+                    
                     if pdf.get_y() > 270:
-                        pdf.add_page(); pdf.set_font('Nanum', '', 11)
+                        pdf.add_page()
+                        pdf.set_font('Nanum', '', 11)
+                    
                     cx, cy = pdf.get_x(), pdf.get_y()
                     pdf.cell(col_width, 8, f"({int(no)}) {answer}")
+                    
                     if i % 2 == 0: pdf.set_xy(pdf.l_margin, cy + 8)
                     else: pdf.set_xy(cx + col_width + 10, cy)
 
-                # [수정 포인트] fpdf2 최신버전은 bytes를 직접 반환함
+                # 🔥 [핵심 수정] PDF 출력을 바이너리 스트림으로 변환하여 안전하게 전송
                 pdf_output = pdf.output()
-                st.download_button("📥 PDF 다운로드", data=pdf_output, file_name=f"voca_test.pdf", mime="application/pdf")
+                if isinstance(pdf_output, bytearray):
+                    pdf_output = bytes(pdf_output)
+                
+                st.download_button(
+                    label="📥 PDF 다운로드", 
+                    data=pdf_output, 
+                    file_name=f"voca_test_{start_range}_{end_range}.pdf", 
+                    mime="application/pdf"
+                )
 
 except Exception as e:
     st.error(f"시스템 오류 발생: {e}")
