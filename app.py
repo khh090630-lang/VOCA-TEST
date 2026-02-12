@@ -43,8 +43,8 @@ names = ["사용자1"]
 usernames = ["user1"]
 passwords = ["1234"] # 초기 비밀번호
 
-# 비밀번호 해싱 처리 (최신 라이브러리 버전 대응: generate() -> hash())
-hashed_passwords = stauth.Hasher(passwords).hash(passwords)
+# 비밀번호 해싱 처리 (최신 라이브러리 v0.3.0+ 대응 방식)
+hashed_passwords = stauth.Hasher.hash_passwords(passwords)
 
 credentials = {
     "usernames": {
