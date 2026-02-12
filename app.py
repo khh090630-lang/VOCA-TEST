@@ -20,7 +20,7 @@ class VocaPDF(FPDF):
 
         # 현재 작업 디렉토리 확인
         base_path = os.getcwd()
-        font_path = os.path.join(base_path, "NanumGothic.otf")
+        font_path = os.path.join(base_path, "NanumGothic.ttf")  # 🔥 여기만 수정 (.ttf)
 
         if not os.path.exists(font_path):
             raise FileNotFoundError(f"폰트 파일을 찾을 수 없습니다: {font_path}")
