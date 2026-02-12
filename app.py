@@ -3,17 +3,17 @@ import pandas as pd
 import random
 from fpdf import FPDF
 import io
-import requests
-from urllib.parse import quote
 import os
+from urllib.parse import quote
 
 # --- 1. 설정 및 데이터 로드 ---
+# 원본 단어장(jsvoca) ID
 SHEET_ID = '1VdVqTA33lWopMV-ExA3XUy36YAwS3fJleZvTNRQNeDM'
-W_SHEET_ID = '1WzJ58eKSPeBcO7wg6_XZUzedin385rWJp_eoLB8Ez2w' # 오답 파일 ID
+# 오답 단어장(Wjsvoca) ID
+W_SHEET_ID = '1WzJ58eKSPeBcO7wg6_XZUzedin385rWJp_eoLB8Ez2w'
 
 SHEET_NAME = 'JS_voca'
 WRONG_SHEET_NAME = 'Wjsvoca'
-GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwT3P3EcV1Luf9HgcxzRChyH2dDMIO4xo3cuLbOsqZCQRjc-YjorMc2ojQg3JKYokJf/exec"
 
 def get_sheet_url(file_id, sheet_name):
     encoded_name = quote(sheet_name)
@@ -25,8 +25,7 @@ class VocaPDF(FPDF):
         base_path = os.getcwd()
         font_path = os.path.join(base_path, "NanumGothic.ttf")
         if not os.path.exists(font_path):
-            # 폰트 에러 시 사용자에게 알림
-            st.error(f"폰트 파일(NanumGothic.ttf)이 실행 경로에 없습니다: {font_path}")
+            st.error("폰트 파일이 없습니다.")
             st.stop()
         self.add_font('Nanum', '', font_path, uni=True)
 
@@ -35,18 +34,20 @@ class VocaPDF(FPDF):
         self.cell(0, 10, 'English Vocabulary Test', ln=True, align='C')
         self.ln(5)
 
-@st.cache_data(show_spinner="단어장을 불러오는 중입니다...", ttl=5)
+@st.cache_data(show_spinner="데이터 로드 중...", ttl=5)
 def get_data(file_id, sheet_name):
-    url = get_sheet_url(file_id, sheet_name)
-    df = pd.read_csv(url)
-    df = df.iloc[:, [0, 1, 2]]
-    df.columns = ['No', 'Word', 'Meaning']
-    df = df.dropna(subset=['Word'])
-    # 번호(No) 열을 확실하게 숫자형으로 변환 (필터링 오류 방지)
-    df['No'] = pd.to_numeric(df['No'], errors='coerce')
-    df = df.dropna(subset=['No'])
-    return df
+    try:
+        url = get_sheet_url(file_id, sheet_name)
+        df = pd.read_csv(url)
+        df = df.iloc[:, [0, 1, 2]]
+        df.columns = ['No', 'Word', 'Meaning']
+        df = df.dropna(subset=['Word'])
+        df['No'] = pd.to_numeric(df['No'], errors='coerce')
+        return df.dropna(subset=['No'])
+    except:
+        return pd.DataFrame(columns=['No', 'Word', 'Meaning'])
 
+# --- 2. UI 구성 ---
 st.set_page_config(page_title="Voca PDF Generator", page_icon="📝")
 
 st.sidebar.header("🔐 Admin Access")
@@ -60,102 +61,93 @@ if is_admin:
 menu = st.sidebar.selectbox("메뉴 선택", menu_options)
 st.title(f"📝 {menu}")
 
+# 데이터 로드
+if "관리자" in menu:
+    # 관리자 모드일 때는 원본(jsvoca)과 오답(Wjsvoca) 데이터를 상황에 맞게 사용
+    source_df = get_data(SHEET_ID, SHEET_NAME) # 원본
+    wrong_df = get_data(W_SHEET_ID, WRONG_SHEET_NAME) # 오답 시트
+    df = wrong_df
+else:
+    df = get_data(SHEET_ID, SHEET_NAME)
+
 try:
-    if "관리자" in menu:
-        target_file_id = W_SHEET_ID
-        target_sheet = WRONG_SHEET_NAME
-    else:
-        target_file_id = SHEET_ID
-        target_sheet = SHEET_NAME
-
-    df = get_data(target_file_id, target_sheet)
-    total_count = len(df)
-
     if is_admin and "관리자" in menu:
-        st.subheader("🛠️ 오답 단어 자동 등록")
-        wrong_nos = st.text_input("틀린 번호 입력 (예: 5, 23, 104)")
-        if st.button("🚀 구글 시트로 전송"):
-            if wrong_nos:
-                # GAS 전송 시 타임아웃 방지
-                res = requests.get(f"{GAS_WEB_APP_URL}?nos={wrong_nos}", timeout=10)
-                if res.status_code == 200:
-                    st.success(f"전송 성공: {res.text}")
-                    st.cache_data.clear()
-                else: st.error("전송 실패 (네트워크 오류)")
-            else: st.warning("번호를 입력하세요.")
+        st.subheader("🔍 오답 단어 추출 (수동 복사용)")
+        input_nos = st.text_input("틀린 번호를 입력하세요 (예: 5, 12, 104)")
+        
+        if input_nos:
+            target_nos = [n.strip() for n in input_nos.split(",") if n.strip().isdigit()]
+            target_nos = [int(n) for n in target_nos]
+            
+            # 원본 데이터에서 해당 번호들만 추출
+            extracted_df = source_df[source_df['No'].isin(target_nos)]
+            
+            if not extracted_df.empty:
+                st.write("✅ 아래 데이터를 복사해서 Wjsvoca 시트에 붙여넣으세요:")
+                st.dataframe(extracted_df, use_container_width=True)
+                
+                # 클립보드 복사용 텍스트 생성 (탭 구분 형식 - 엑셀/시트용)
+                tsv_data = extracted_df.to_csv(index=False, header=False, sep='\t')
+                st.code(tsv_data, language='text')
+                st.caption("위 박스의 내용을 드래그해서 복사(Ctrl+C)한 뒤 구글 시트에 붙여넣으세요.")
+            else:
+                st.warning("해당 번호의 단어를 원본에서 찾을 수 없습니다.")
         st.markdown("---")
-        st.subheader("📄 오답 학습지 생성")
+        st.subheader("📄 오답 학습지 생성 (Wjsvoca 기준)")
 
+    # --- 공통 PDF 생성 로직 ---
     st.sidebar.header("⚙️ 시험지 설정")
-    # 데이터가 없을 경우를 대비한 안전 장치
-    min_val = int(df['No'].min()) if not df.empty else 1
-    max_val = int(df['No'].max()) if not df.empty else 1
-    
-    start_num = st.sidebar.number_input("시작 번호", min_value=min_val, max_value=max_val, value=min_val)
-    end_num = st.sidebar.number_input("끝 번호", min_value=min_val, max_value=max_val, value=max_val)
-    
-    st.sidebar.write(f"현재 로드된 단어 수: **{total_count}개**")
-    mode = st.sidebar.radio("시험 유형", ["영단어 보고 뜻 쓰기", "뜻 보고 영어 쓰기"])
-    shuffle = st.sidebar.checkbox("단어 순서 무작위로 섞기", value=True)
+    if df.empty:
+        st.warning("데이터가 없습니다. 번호를 확인하거나 시트 공유 설정을 확인하세요.")
+    else:
+        min_no = int(df['No'].min())
+        max_no = int(df['No'].max())
+        
+        start_num = st.sidebar.number_input("시작 번호", min_value=min_no, max_value=max_no, value=min_no)
+        end_num = st.sidebar.number_input("끝 번호", min_value=min_no, max_value=max_no, value=max_no)
+        
+        mode = st.sidebar.radio("시험 유형", ["영단어 보고 뜻 쓰기", "뜻 보고 영어 쓰기"])
+        shuffle = st.sidebar.checkbox("단어 순서 섞기", value=True)
 
-    if st.button("📄 PDF 시험지 생성하기"):
-        if start_num > end_num:
-            st.error("시작 번호가 끝 번호보다 클 수 없습니다.")
-        elif df.empty:
-            st.error("선택한 범위에 단어가 없습니다.")
-        else:
+        if st.button("📄 PDF 시험지 생성하기"):
             selected_df = df[(df['No'] >= start_num) & (df['No'] <= end_num)].copy()
             quiz_items = selected_df.values.tolist()
-            if shuffle:
-                random.shuffle(quiz_items)
+            if shuffle: random.shuffle(quiz_items)
 
             pdf = VocaPDF()
             pdf.set_auto_page_break(auto=True, margin=15)
             pdf.add_page()
             pdf.set_font('Nanum', '', 12)
-            col_width = 90
             
+            col_width = 90
             for i, item in enumerate(quiz_items, 1):
-                origin_no, word, meaning = item
-                question = word if mode == "영단어 보고 뜻 쓰기" else meaning
-                if pdf.get_y() > 250:
-                    pdf.add_page()
-                    pdf.set_font('Nanum', '', 12)
-                curr_x, curr_y = pdf.get_x(), pdf.get_y()
-                pdf.cell(col_width, 7, f"({int(origin_no)}) {question}", ln=0)
-                pdf.set_xy(curr_x, curr_y + 7)
+                no, word, meaning = item
+                q = word if mode == "영단어 보고 뜻 쓰기" else meaning
+                if pdf.get_y() > 250: pdf.add_page()
+                cx, cy = pdf.get_x(), pdf.get_y()
+                pdf.cell(col_width, 7, f"({int(no)}) {q}", ln=0)
+                pdf.set_xy(cx, cy + 7)
                 pdf.set_font('Nanum', '', 10)
                 pdf.cell(col_width, 7, "Ans: ____________________", ln=0)
                 pdf.set_font('Nanum', '', 12)
-                if i % 2 == 0:
-                    pdf.set_xy(pdf.l_margin, curr_y + 18)
-                else:
-                    pdf.set_xy(curr_x + col_width + 10, curr_y)
+                if i % 2 == 0: pdf.set_xy(pdf.l_margin, cy + 18)
+                else: pdf.set_xy(cx + col_width + 10, cy)
             
+            # 정답지 생성
             pdf.add_page()
-            pdf.set_font('Nanum', '', 14)
-            pdf.cell(0, 10, "정답지 (Answer Key)", ln=True, align='C')
-            pdf.ln(5)
+            pdf.set_font('Nanum', '', 14); pdf.cell(0, 10, "정답지", ln=True, align='C'); pdf.ln(5)
             pdf.set_font('Nanum', '', 11)
             for i, item in enumerate(quiz_items, 1):
-                origin_no, word, meaning = item
-                answer = meaning if mode == "영단어 보고 뜻 쓰기" else word
-                if pdf.get_y() > 270:
-                    pdf.add_page()
-                    pdf.set_font('Nanum', '', 11)
-                curr_x, curr_y = pdf.get_x(), pdf.get_y()
-                pdf.cell(col_width, 8, f"({int(origin_no)}) {answer}", border=0)
-                if i % 2 == 0:
-                    pdf.set_xy(pdf.l_margin, curr_y + 8)
-                else:
-                    pdf.set_xy(curr_x + col_width + 10, curr_y)
+                no, word, meaning = item
+                ans = meaning if mode == "영단어 보고 뜻 쓰기" else word
+                if pdf.get_y() > 270: pdf.add_page()
+                cx, cy = pdf.get_x(), pdf.get_y()
+                pdf.cell(col_width, 8, f"({int(no)}) {ans}", border=0)
+                if i % 2 == 0: pdf.set_xy(pdf.l_margin, cy + 8)
+                else: pdf.set_xy(cx + col_width + 10, cy)
 
-            pdf_output = pdf.output(dest="S").encode("latin-1")
-            st.download_button(
-                label="📥 PDF 다운로드",
-                data=pdf_output,
-                file_name=f"voca_test_{start_num}_{end_num}.pdf",
-                mime="application/pdf"
-            )
+            st.download_button(label="📥 PDF 다운로드", data=pdf.output(dest="S").encode("latin-1"),
+                             file_name=f"test_{start_num}_{end_num}.pdf", mime="application/pdf")
+
 except Exception as e:
-    st.error(f"오류가 발생했습니다: {e}")
+    st.error(f"오류: {e}")
