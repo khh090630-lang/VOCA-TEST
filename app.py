@@ -4,39 +4,28 @@ import random
 from fpdf import FPDF
 import io
 from urllib.parse import quote
-import os
 
 # --- 1. 설정 및 데이터 로드 ---
 SHEET_ID = '1VdVqTA33lWopMV-ExA3XUy36YAwS3fJleZvTNRQNeDM'
 SHEET_NAME = 'JS_voca' 
 
 encoded_sheet_name = quote(SHEET_NAME)
+# 중요: &range=A1:B2001 을 추가하여 2000번 단어까지 강제로 읽어옵니다.
 URL = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_sheet_name}&range=A1:B2001'
 
 class VocaPDF(FPDF):
     def __init__(self):
         super().__init__()
-        # 파일명이 NanumGothic.otf 인지 다시 한 번 확인하세요!
-        font_file = 'NanumGothic.otf' 
-        
-        if os.path.exists(font_file):
-            try:
-                # [핵심 수정] fpdf2 전용: uni=True는 절대 쓰지 마세요. 
-                # fname을 사용해 바이너리로 읽도록 명시합니다.
-                self.add_font('Nanum', style='', fname=font_file)
-            except Exception as e:
-                st.error(f"폰트 등록 실패: {e}")
-        else:
-            st.error(f"❌ '{font_file}' 파일을 찾을 수 없습니다. 경로를 확인하세요.")
+        try:
+            # 폰트 파일명이 나눔고딕.otf 라면 이름을 맞춰주세요.
+            self.add_font('Nanum', '', 'NanumGothic.otf', uni=True)
+        except:
+            pass
 
     def header(self):
-        try:
-            self.set_font('Nanum', size=16)
-            self.cell(0, 10, 'English Vocabulary Test', ln=True, align='C')
-            self.ln(5)
-        except:
-            # 폰트 로드 실패 시 비상용 폰트
-            self.set_font('Helvetica', style='B', size=16)
+        self.set_font('Nanum', '', 16)
+        self.cell(0, 10, 'English Vocabulary Test', ln=True, align='C')
+        self.ln(5)
 
 # --- 2. 데이터 불러오기 함수 ---
 @st.cache_data(show_spinner="단어장을 불러오는 중입니다...", ttl=600)
@@ -50,6 +39,7 @@ def get_data():
 # --- 3. UI 구성 ---
 st.set_page_config(page_title="Voca PDF Generator", page_icon="📝")
 st.title("📝 나만의 단어 시험지 생성기")
+st.info("구글 스프레드시트의 2,000단어 데이터를 연동합니다.")
 
 try:
     df = get_data()
@@ -59,6 +49,8 @@ try:
     start_num = st.sidebar.number_input("시작 번호", min_value=1, max_value=total_count, value=1)
     end_num = st.sidebar.number_input("끝 번호", min_value=1, max_value=total_count, value=min(50, total_count))
     
+    st.sidebar.write(f"현재 로드된 단어 수: **{total_count}개**")
+
     mode = st.sidebar.radio("시험 유형", ["영단어 보고 뜻 쓰기", "뜻 보고 영어 쓰기"])
     shuffle = st.sidebar.checkbox("단어 순서 무작위로 섞기", value=True)
 
@@ -78,8 +70,7 @@ try:
             
             # 1페이지: 문제지
             pdf.add_page()
-            # fpdf2에서는 set_font('이름', size=숫자) 형식을 권장합니다.
-            pdf.set_font('Nanum', size=12)
+            pdf.set_font('Nanum', '', 12)
             col_width = 90  
             
             for i, item in enumerate(quiz_items, 1):
@@ -88,51 +79,58 @@ try:
                 
                 if pdf.get_y() > 250:
                     pdf.add_page()
-                    pdf.set_font('Nanum', size=12)
+                    pdf.set_font('Nanum', '', 12)
 
-                curr_x, curr_y = pdf.get_x(), pdf.get_y()
+                curr_x = pdf.get_x()
+                curr_y = pdf.get_y()
                 
-                pdf.cell(col_width, 7, f"({origin_no}) {question}")
+                pdf.cell(col_width, 7, f"({origin_no}) {question}", ln=0)
                 pdf.set_xy(curr_x, curr_y + 7)
-                pdf.set_font('Nanum', size=10)
-                pdf.cell(col_width, 7, "Ans: ____________________")
-                pdf.set_font('Nanum', size=12)
+                pdf.set_font('Nanum', '', 10)
+                pdf.cell(col_width, 7, "Ans: ____________________", ln=0)
+                pdf.set_font('Nanum', '', 12)
                 
                 if i % 2 == 0:
                     pdf.set_xy(pdf.l_margin, curr_y + 18)
                 else:
                     pdf.set_xy(curr_x + col_width + 10, curr_y)
             
-            # 2페이지: 정답지
+            # 2페이지: 정답지 (수정된 로직)
             pdf.add_page()
-            pdf.set_font('Nanum', size=14)
+            pdf.set_font('Nanum', '', 14)
             pdf.cell(0, 10, "정답지 (Answer Key)", ln=True, align='C')
             pdf.ln(5)
-            pdf.set_font('Nanum', size=11)
+            pdf.set_font('Nanum', '', 11)
             
             for i, item in enumerate(quiz_items, 1):
                 word, meaning, origin_no = item
                 answer = meaning if mode == "영단어 보고 뜻 쓰기" else word
                 
+                # 페이지 끝에 도달하면 새 페이지 추가
                 if pdf.get_y() > 270:
                     pdf.add_page()
-                    pdf.set_font('Nanum', size=11)
+                    pdf.set_font('Nanum', '', 11)
 
-                curr_x, curr_y = pdf.get_x(), pdf.get_y()
-                pdf.cell(col_width, 8, f"({origin_no}) {answer}")
+                curr_x = pdf.get_x()
+                curr_y = pdf.get_y()
+                
+                # 한 줄에 2개씩 배치
+                pdf.cell(col_width, 8, f"({origin_no}) {answer}", border=0)
                 
                 if i % 2 == 0:
-                    pdf.set_xy(pdf.l_margin, curr_y + 8)
+                    pdf.set_xy(pdf.l_margin, curr_y + 8) # 줄바꿈 시 y값만 명확히 증가
                 else:
-                    pdf.set_xy(curr_x + col_width + 10, curr_y)
+                    pdf.set_xy(curr_x + col_width + 10, curr_y) # 옆 칸으로 이동
 
-            # [핵심] fpdf2의 출력은 bytes()로 변환해서 넘겨야 안전합니다.
+            # 출력 스트림 처리
+            pdf_output = pdf.output()
+            
             st.download_button(
                 label="📥 PDF 다운로드",
-                data=bytes(pdf.output()),
+                data=bytes(pdf_output),
                 file_name=f"voca_test_{start_num}_{end_num}.pdf",
                 mime="application/pdf"
             )
 
 except Exception as e:
-    st.error(f"오류 발생: {e}")
+    st.error(f"데이터를 불러오지 못했습니다. 에러: {e}")
