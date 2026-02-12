@@ -8,15 +8,19 @@ from urllib.parse import quote
 import os
 
 # --- 1. 설정 및 데이터 로드 ---
+# 원본 단어장 파일 ID
 SHEET_ID = '1VdVqTA33lWopMV-ExA3XUy36YAwS3fJleZvTNRQNeDM'
+# 🔥 [수정] 오답 시트 파일의 실제 ID를 여기에 입력하세요
+W_SHEET_ID = '1WzJ58eKSPeBcO7wg6_XZUzedin385rWJp_eoLB8Ez2w'
+
 SHEET_NAME = 'JS_voca'
 WRONG_SHEET_NAME = 'Wjsvoca'
 GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwv7ivj4U65IukA19WFkm1lj9He1WzXfYg9se8MIAoKz_bmp1dVaU6tTUOOybyTE97J/exec"
 
-def get_sheet_url(sheet_name):
+def get_sheet_url(file_id, sheet_name):
     encoded_name = quote(sheet_name)
     # A1:C2001로 범위를 확장하여 번호(A), 단어(B), 뜻(C)을 모두 가져옵니다.
-    return f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}&range=A1:C2001'
+    return f'https://docs.google.com/spreadsheets/d/{file_id}/gviz/tq?tqx=out:csv&sheet={encoded_name}&range=A1:C2001'
 
 class VocaPDF(FPDF):
     def __init__(self):
@@ -34,8 +38,8 @@ class VocaPDF(FPDF):
 
 # --- 2. 데이터 불러오기 함수 ---
 @st.cache_data(show_spinner="단어장을 불러오는 중입니다...", ttl=5)
-def get_data(sheet_name):
-    url = get_sheet_url(sheet_name)
+def get_data(file_id, sheet_name):
+    url = get_sheet_url(file_id, sheet_name)
     df = pd.read_csv(url)
     # [구조 수정] A(0):번호, B(1):단어, C(2):뜻
     df = df.iloc[:, [0, 1, 2]]
@@ -59,9 +63,15 @@ menu = st.sidebar.selectbox("메뉴 선택", menu_options)
 st.title(f"📝 {menu}")
 
 try:
-    # 메뉴에 따라 타겟 시트 변경
-    target_sheet = WRONG_SHEET_NAME if "관리자" in menu else SHEET_NAME
-    df = get_data(target_sheet)
+    # 🔥 [수정] 메뉴에 따라 타겟 파일 ID와 시트 이름 변경
+    if "관리자" in menu:
+        target_file_id = W_SHEET_ID
+        target_sheet = WRONG_SHEET_NAME
+    else:
+        target_file_id = SHEET_ID
+        target_sheet = SHEET_NAME
+
+    df = get_data(target_file_id, target_sheet)
     total_count = len(df)
 
     # 관리자 전용 오답 전송 UI
@@ -69,7 +79,7 @@ try:
         st.subheader("🛠️ 오답 단어 자동 등록")
         wrong_nos = st.text_input("틀린 번호 입력 (예: 5, 23, 104)")
         if st.button("🚀 구글 시트로 전송"):
-            if wrong_nos and "여기에" not in GAS_WEB_APP_URL:
+            if wrong_nos and "https://script" in GAS_WEB_APP_URL:
                 res = requests.get(f"{GAS_WEB_APP_URL}?nos={wrong_nos}")
                 if res.status_code == 200:
                     st.success(f"전송 성공: {res.text}")
