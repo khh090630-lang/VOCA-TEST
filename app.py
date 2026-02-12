@@ -11,7 +11,7 @@ import os
 SHEET_ID = '1VdVqTA33lWopMV-ExA3XUy36YAwS3fJleZvTNRQNeDM'
 SHEET_NAME = 'JS_voca'
 WRONG_SHEET_NAME = 'Wjsvoca'
-GAS_WEB_APP_URL = "여기에_URL을_붙여넣으세요"
+GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycby2cCri7SEahXW2gM5XvAKDZrnDXgfE5-fYmUWSdQ6UB0KiynXowj8CQAx0OIr5roOi/exec"
 
 def get_sheet_url(sheet_name):
     encoded_name = quote(sheet_name)
