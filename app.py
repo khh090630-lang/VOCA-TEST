@@ -11,14 +11,12 @@ SHEET_ID = '1VdVqTA33lWopMV-ExA3XUy36YAwS3fJleZvTNRQNeDM'
 SHEET_NAME = 'JS_voca' 
 
 encoded_sheet_name = quote(SHEET_NAME)
-# 중요: &range=A1:B2001 을 추가하여 2000번 단어까지 강제로 읽어옵니다.
 URL = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_sheet_name}&range=A1:B2001'
 
 class VocaPDF(FPDF):
     def __init__(self):
         super().__init__()
         try:
-            # 폰트 파일명이 나눔고딕.otf 라면 이름을 맞춰주세요.
             self.add_font('Nanum', '', 'NanumGothic.otf', uni=True)
         except:
             pass
@@ -37,24 +35,21 @@ def get_data():
     df = df.dropna(subset=['Word'])
     return df
 
-# --- 3. 로그인 설정 ---
-# 테스트용 사용자 정보
-names = ["사용자1"]
-usernames = ["user1"]
-passwords = ["1234"] # 초기 비밀번호
-
-# 비밀번호 해싱 처리 (최신 라이브러리 v0.3.0+ 대응 방식)
-hashed_passwords = stauth.Hasher.hash_passwords(passwords)
+# --- 3. 로그인 설정 (최신 버전 v0.3.x 대응) ---
+# 비밀번호를 미리 해싱해서 구조를 만듭니다.
+passwords_to_hash = ['1234']
+hashed_passwords = stauth.Hasher(passwords_to_hash).generate()
 
 credentials = {
     "usernames": {
-        usernames[0]: {
-            "name": names[0],
+        "user1": {
+            "name": "사용자1",
             "password": hashed_passwords[0]
         }
     }
 }
 
+# 인증 객체 생성
 authenticator = stauth.Authenticate(
     credentials,
     "voca_cookie",
@@ -66,6 +61,7 @@ authenticator = stauth.Authenticate(
 st.set_page_config(page_title="Voca PDF Generator", page_icon="📝")
 
 # 로그인 화면 호출
+# 최신 버전은 login 메서드의 인자가 (label, location) 순서입니다.
 name, authentication_status, username = authenticator.login('main')
 
 if authentication_status:
@@ -101,7 +97,6 @@ if authentication_status:
                 pdf = VocaPDF()
                 pdf.set_auto_page_break(auto=True, margin=15)
                 
-                # 1페이지: 문제지
                 pdf.add_page()
                 pdf.set_font('Nanum', '', 12)
                 col_width = 90  
@@ -128,7 +123,6 @@ if authentication_status:
                     else:
                         pdf.set_xy(curr_x + col_width + 10, curr_y)
                 
-                # 2페이지: 정답지
                 pdf.add_page()
                 pdf.set_font('Nanum', '', 14)
                 pdf.cell(0, 10, "정답지 (Answer Key)", ln=True, align='C')
