@@ -6,6 +6,7 @@ import io
 from urllib.parse import quote
 import streamlit_authenticator as stauth
 import bcrypt
+from streamlit_gsheets import GSheetsConnection
 
 # --- 1. 설정 및 데이터 로드 ---
 SHEET_ID = '1VdVqTA33lWopMV-ExA3XUy36YAwS3fJleZvTNRQNeDM'
@@ -13,6 +14,9 @@ SHEET_NAME = 'JS_voca'
 
 encoded_sheet_name = quote(SHEET_NAME)
 URL = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_sheet_name}&range=A1:B2001'
+
+# 구글 시트 연결 (DB 역할)
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 class VocaPDF(FPDF):
     def __init__(self):
@@ -36,22 +40,21 @@ def get_data():
     df = df.dropna(subset=['Word'])
     return df
 
-# --- 3. 로그인 설정 ---
-names = ["사용자1"]
-usernames = ["user1"]
-passwords = ["1234"]
+# 구글 시트에서 유저 정보 로드
+def get_users():
+    return conn.read(worksheet="users", ttl=0)
 
-# bcrypt를 이용한 안전한 해싱
-hashed_passwords = [bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8') for password in passwords]
+# --- 3. 로그인 및 회원가입 설정 ---
+user_df = get_users()
+credentials = {"usernames": {}}
 
-credentials = {
-    "usernames": {
-        usernames[0]: {
-            "name": names[0],
-            "password": hashed_passwords[0]
-        }
+# 시트 데이터를 인증 라이브러리 형식으로 변환
+for _, row in user_df.iterrows():
+    credentials["usernames"][row['username']] = {
+        "name": row['name'],
+        "password": row['password'],
+        "email": row.get('email', '')
     }
-}
 
 # 인증 객체 생성
 authenticator = stauth.Authenticate(
@@ -61,109 +64,137 @@ authenticator = stauth.Authenticate(
     30
 )
 
-# --- 4. 로그인 및 UI 구성 ---
+# --- 4. UI 구성 ---
 st.set_page_config(page_title="Voca PDF Generator", page_icon="📝")
 
-# [수정된 부분] 최신 버전에서는 login 호출 시 반환값을 처리하는 방식이 달라졌습니다.
-# 안전하게 객체 내부 상태를 사용하는 방식으로 변경합니다.
-authenticator.login()
+tab1, tab2 = st.tabs(["로그인", "회원가입"])
 
-if st.session_state["authentication_status"]:
-    # 로그인 성공 시
-    authenticator.logout('Logout', 'sidebar')
-    st.title(f"📝 {st.session_state['name']}님의 단어 시험지 생성기")
-    st.info("구글 스프레드시트의 2,000단어 데이터를 연동합니다.")
+with tab2:
+    st.subheader("회원가입")
+    with st.form("registration_form"):
+        new_email = st.text_input("이메일")
+        new_username = st.text_input("아이디")
+        new_name = st.text_input("이름")
+        new_password = st.text_input("비밀번호", type="password")
+        submit_reg = st.form_submit_button("가입하기")
 
-    try:
-        df = get_data()
-        total_count = len(df)
-        
-        st.sidebar.header("⚙️ 시험지 설정")
-        start_num = st.sidebar.number_input("시작 번호", min_value=1, max_value=total_count, value=1)
-        end_num = st.sidebar.number_input("끝 번호", min_value=1, max_value=total_count, value=min(50, total_count))
-        
-        st.sidebar.write(f"현재 로드된 단어 수: **{total_count}개**")
-
-        mode = st.sidebar.radio("시험 유형", ["영단어 보고 뜻 쓰기", "뜻 보고 영어 쓰기"])
-        shuffle = st.sidebar.checkbox("단어 순서 무작위로 섞기", value=True)
-
-        if st.button("📄 PDF 시험지 생성하기"):
-            if start_num > end_num:
-                st.error("시작 번호가 끝 번호보다 클 수 없습니다.")
+        if submit_reg:
+            if new_username in credentials["usernames"]:
+                st.error("이미 존재하는 아이디입니다.")
+            elif not new_username or not new_password:
+                st.error("아이디와 비밀번호를 입력해주세요.")
             else:
-                selected_df = df.iloc[start_num-1 : end_num].copy()
-                selected_df['Original_No'] = range(start_num, start_num + len(selected_df))
-                
-                quiz_items = selected_df.values.tolist()
-                if shuffle:
-                    random.shuffle(quiz_items)
+                # 비밀번호 해싱 후 구글 시트에 저장
+                hashed_pw = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                new_user_data = pd.DataFrame([{
+                    "name": new_name,
+                    "username": new_username,
+                    "password": hashed_pw,
+                    "email": new_email
+                }])
+                updated_df = pd.concat([user_df, new_user_data], ignore_index=True)
+                conn.update(worksheet="users", data=updated_df)
+                st.success("회원가입 성공! 로그인 탭으로 이동하세요.")
+                st.rerun()
 
-                pdf = VocaPDF()
-                pdf.set_auto_page_break(auto=True, margin=15)
-                
-                pdf.add_page()
-                pdf.set_font('Nanum', '', 12)
-                col_width = 90  
-                
-                for i, item in enumerate(quiz_items, 1):
-                    word, meaning, origin_no = item
-                    question = word if mode == "영단어 보고 뜻 쓰기" else meaning
-                    
-                    if pdf.get_y() > 250:
-                        pdf.add_page()
-                        pdf.set_font('Nanum', '', 12)
+with tab1:
+    authenticator.login()
 
-                    curr_x = pdf.get_x()
-                    curr_y = pdf.get_y()
+    if st.session_state["authentication_status"]:
+        authenticator.logout('Logout', 'sidebar')
+        st.title(f"📝 {st.session_state['name']}님의 단어 시험지 생성기")
+        st.info("구글 스프레드시트의 2,000단어 데이터를 연동합니다.")
+
+        try:
+            df = get_data()
+            total_count = len(df)
+            
+            st.sidebar.header("⚙️ 시험지 설정")
+            start_num = st.sidebar.number_input("시작 번호", min_value=1, max_value=total_count, value=1)
+            end_num = st.sidebar.number_input("끝 번호", min_value=1, max_value=total_count, value=min(50, total_count))
+            
+            st.sidebar.write(f"현재 로드된 단어 수: **{total_count}개**")
+
+            mode = st.sidebar.radio("시험 유형", ["영단어 보고 뜻 쓰기", "뜻 보고 영어 쓰기"])
+            shuffle = st.sidebar.checkbox("단어 순서 무작위로 섞기", value=True)
+
+            if st.button("📄 PDF 시험지 생성하기"):
+                if start_num > end_num:
+                    st.error("시작 번호가 끝 번호보다 클 수 없습니다.")
+                else:
+                    selected_df = df.iloc[start_num-1 : end_num].copy()
+                    selected_df['Original_No'] = range(start_num, start_num + len(selected_df))
                     
-                    pdf.cell(col_width, 7, f"({origin_no}) {question}", ln=0)
-                    pdf.set_xy(curr_x, curr_y + 7)
-                    pdf.set_font('Nanum', '', 10)
-                    pdf.cell(col_width, 7, "Ans: ____________________", ln=0)
+                    quiz_items = selected_df.values.tolist()
+                    if shuffle:
+                        random.shuffle(quiz_items)
+
+                    pdf = VocaPDF()
+                    pdf.set_auto_page_break(auto=True, margin=15)
+                    
+                    pdf.add_page()
                     pdf.set_font('Nanum', '', 12)
+                    col_width = 90  
                     
-                    if i % 2 == 0:
-                        pdf.set_xy(pdf.l_margin, curr_y + 18)
-                    else:
-                        pdf.set_xy(curr_x + col_width + 10, curr_y)
-                
-                pdf.add_page()
-                pdf.set_font('Nanum', '', 14)
-                pdf.cell(0, 10, "정답지 (Answer Key)", ln=True, align='C')
-                pdf.ln(5)
-                pdf.set_font('Nanum', '', 11)
-                
-                for i, item in enumerate(quiz_items, 1):
-                    word, meaning, origin_no = item
-                    answer = meaning if mode == "영단어 보고 뜻 쓰기" else word
+                    for i, item in enumerate(quiz_items, 1):
+                        word, meaning, origin_no = item
+                        question = word if mode == "영단어 보고 뜻 쓰기" else meaning
+                        
+                        if pdf.get_y() > 250:
+                            pdf.add_page()
+                            pdf.set_font('Nanum', '', 12)
+
+                        curr_x = pdf.get_x()
+                        curr_y = pdf.get_y()
+                        
+                        pdf.cell(col_width, 7, f"({origin_no}) {question}", ln=0)
+                        pdf.set_xy(curr_x, curr_y + 7)
+                        pdf.set_font('Nanum', '', 10)
+                        pdf.cell(col_width, 7, "Ans: ____________________", ln=0)
+                        pdf.set_font('Nanum', '', 12)
+                        
+                        if i % 2 == 0:
+                            pdf.set_xy(pdf.l_margin, curr_y + 18)
+                        else:
+                            pdf.set_xy(curr_x + col_width + 10, curr_y)
                     
-                    if pdf.get_y() > 270:
-                        pdf.add_page()
-                        pdf.set_font('Nanum', '', 11)
-
-                    curr_x = pdf.get_x()
-                    curr_y = pdf.get_y()
+                    pdf.add_page()
+                    pdf.set_font('Nanum', '', 14)
+                    pdf.cell(0, 10, "정답지 (Answer Key)", ln=True, align='C')
+                    pdf.ln(5)
+                    pdf.set_font('Nanum', '', 11)
                     
-                    pdf.cell(col_width, 8, f"({origin_no}) {answer}", border=0)
+                    for i, item in enumerate(quiz_items, 1):
+                        word, meaning, origin_no = item
+                        answer = meaning if mode == "영단어 보고 뜻 쓰기" else word
+                        
+                        if pdf.get_y() > 270:
+                            pdf.add_page()
+                            pdf.set_font('Nanum', '', 11)
+
+                        curr_x = pdf.get_x()
+                        curr_y = pdf.get_y()
+                        
+                        pdf.cell(col_width, 8, f"({origin_no}) {answer}", border=0)
+                        
+                        if i % 2 == 0:
+                            pdf.set_xy(pdf.l_margin, curr_y + 8)
+                        else:
+                            pdf.set_xy(curr_x + col_width + 10, curr_y)
+
+                    pdf_output = pdf.output()
                     
-                    if i % 2 == 0:
-                        pdf.set_xy(pdf.l_margin, curr_y + 8)
-                    else:
-                        pdf.set_xy(curr_x + col_width + 10, curr_y)
+                    st.download_button(
+                        label="📥 PDF 다운로드",
+                        data=bytes(pdf_output),
+                        file_name=f"voca_test_{start_num}_{end_num}.pdf",
+                        mime="application/pdf"
+                    )
 
-                pdf_output = pdf.output()
-                
-                st.download_button(
-                    label="📥 PDF 다운로드",
-                    data=bytes(pdf_output),
-                    file_name=f"voca_test_{start_num}_{end_num}.pdf",
-                    mime="application/pdf"
-                )
+        except Exception as e:
+            st.error(f"데이터를 불러오지 못했습니다. 에러: {e}")
 
-    except Exception as e:
-        st.error(f"데이터를 불러오지 못했습니다. 에러: {e}")
-
-elif st.session_state["authentication_status"] is False:
-    st.error('사용자 이름 또는 비밀번호가 틀렸습니다.')
-elif st.session_state["authentication_status"] is None:
-    st.warning('로그인이 필요합니다.')
+    elif st.session_state["authentication_status"] is False:
+        st.error('사용자 이름 또는 비밀번호가 틀렸습니다.')
+    elif st.session_state["authentication_status"] is None:
+        st.warning('로그인이 필요합니다.')
