@@ -2,5 +2,5 @@ streamlit
 pandas
 streamlit-authenticator
 bcrypt
-fpdf
+fpdf2
 st-gsheets-connection
