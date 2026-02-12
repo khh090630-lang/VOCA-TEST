@@ -17,20 +17,18 @@ URL = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sh
 class VocaPDF(FPDF):
     def __init__(self):
         super().__init__()
-        self.font_loaded = False
-        try:
-            font_path = os.path.join(os.path.dirname(__file__), "NanumGothic.otf")
-            self.add_font('Nanum', '', font_path, uni=True)
-            self.font_loaded = True
-        except Exception as e:
-            print("폰트 로드 실패:", e)
+
+        # 현재 작업 디렉토리 확인
+        base_path = os.getcwd()
+        font_path = os.path.join(base_path, "NanumGothic.otf")
+
+        if not os.path.exists(font_path):
+            raise FileNotFoundError(f"폰트 파일을 찾을 수 없습니다: {font_path}")
+
+        self.add_font('Nanum', '', font_path, uni=True)
 
     def header(self):
-        if self.font_loaded:
-            self.set_font('Nanum', '', 16)
-        else:
-            self.set_font('Arial', '', 16)
-
+        self.set_font('Nanum', '', 16)
         self.cell(0, 10, 'English Vocabulary Test', ln=True, align='C')
         self.ln(5)
 
@@ -77,12 +75,8 @@ try:
             pdf = VocaPDF()
             pdf.set_auto_page_break(auto=True, margin=15)
             
-            # 1페이지: 문제지
             pdf.add_page()
-            if pdf.font_loaded:
-                pdf.set_font('Nanum', '', 12)
-            else:
-                pdf.set_font('Arial', '', 12)
+            pdf.set_font('Nanum', '', 12)
 
             col_width = 90  
             
@@ -92,10 +86,7 @@ try:
                 
                 if pdf.get_y() > 250:
                     pdf.add_page()
-                    if pdf.font_loaded:
-                        pdf.set_font('Nanum', '', 12)
-                    else:
-                        pdf.set_font('Arial', '', 12)
+                    pdf.set_font('Nanum', '', 12)
 
                 curr_x = pdf.get_x()
                 curr_y = pdf.get_y()
@@ -103,37 +94,20 @@ try:
                 pdf.cell(col_width, 7, f"({origin_no}) {question}", ln=0)
                 pdf.set_xy(curr_x, curr_y + 7)
 
-                if pdf.font_loaded:
-                    pdf.set_font('Nanum', '', 10)
-                else:
-                    pdf.set_font('Arial', '', 10)
-
+                pdf.set_font('Nanum', '', 10)
                 pdf.cell(col_width, 7, "Ans: ____________________", ln=0)
-
-                if pdf.font_loaded:
-                    pdf.set_font('Nanum', '', 12)
-                else:
-                    pdf.set_font('Arial', '', 12)
+                pdf.set_font('Nanum', '', 12)
                 
                 if i % 2 == 0:
                     pdf.set_xy(pdf.l_margin, curr_y + 18)
                 else:
                     pdf.set_xy(curr_x + col_width + 10, curr_y)
             
-            # 2페이지: 정답지
             pdf.add_page()
-            if pdf.font_loaded:
-                pdf.set_font('Nanum', '', 14)
-            else:
-                pdf.set_font('Arial', '', 14)
-
+            pdf.set_font('Nanum', '', 14)
             pdf.cell(0, 10, "정답지 (Answer Key)", ln=True, align='C')
             pdf.ln(5)
-
-            if pdf.font_loaded:
-                pdf.set_font('Nanum', '', 11)
-            else:
-                pdf.set_font('Arial', '', 11)
+            pdf.set_font('Nanum', '', 11)
             
             for i, item in enumerate(quiz_items, 1):
                 word, meaning, origin_no = item
@@ -141,10 +115,7 @@ try:
                 
                 if pdf.get_y() > 270:
                     pdf.add_page()
-                    if pdf.font_loaded:
-                        pdf.set_font('Nanum', '', 11)
-                    else:
-                        pdf.set_font('Arial', '', 11)
+                    pdf.set_font('Nanum', '', 11)
 
                 curr_x = pdf.get_x()
                 curr_y = pdf.get_y()
@@ -156,11 +127,11 @@ try:
                 else:
                     pdf.set_xy(curr_x + col_width + 10, curr_y)
 
-            pdf_output = pdf.output()
+            pdf_output = pdf.output(dest="S").encode("latin-1")
 
             st.download_button(
                 label="📥 PDF 다운로드",
-                data=bytes(pdf_output),
+                data=pdf_output,
                 file_name=f"voca_test_{start_num}_{end_num}.pdf",
                 mime="application/pdf"
             )
