@@ -16,25 +16,26 @@ URL = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sh
 class VocaPDF(FPDF):
     def __init__(self):
         super().__init__()
-        # 폰트 파일명이 정확히 'NanumGothic.otf'인지 확인하세요.
+        # 파일명이 NanumGothic.otf 인지 다시 한 번 확인하세요!
         font_file = 'NanumGothic.otf' 
         
         if os.path.exists(font_file):
             try:
-                # fpdf2 전용 폰트 등록 방식 (uni=True 생략)
+                # [핵심 수정] fpdf2 전용: uni=True는 절대 쓰지 마세요. 
+                # fname을 사용해 바이너리로 읽도록 명시합니다.
                 self.add_font('Nanum', style='', fname=font_file)
             except Exception as e:
-                st.error(f"폰트 등록 중 오류 발생: {e}")
+                st.error(f"폰트 등록 실패: {e}")
         else:
-            st.error(f"❌ '{font_file}' 파일을 찾을 수 없습니다.")
+            st.error(f"❌ '{font_file}' 파일을 찾을 수 없습니다. 경로를 확인하세요.")
 
     def header(self):
-        # 폰트가 정상 등록되었을 때만 사용
         try:
             self.set_font('Nanum', size=16)
             self.cell(0, 10, 'English Vocabulary Test', ln=True, align='C')
             self.ln(5)
         except:
+            # 폰트 로드 실패 시 비상용 폰트
             self.set_font('Helvetica', style='B', size=16)
 
 # --- 2. 데이터 불러오기 함수 ---
@@ -77,6 +78,7 @@ try:
             
             # 1페이지: 문제지
             pdf.add_page()
+            # fpdf2에서는 set_font('이름', size=숫자) 형식을 권장합니다.
             pdf.set_font('Nanum', size=12)
             col_width = 90  
             
@@ -124,7 +126,7 @@ try:
                 else:
                     pdf.set_xy(curr_x + col_width + 10, curr_y)
 
-            # 다운로드 버튼
+            # [핵심] fpdf2의 출력은 bytes()로 변환해서 넘겨야 안전합니다.
             st.download_button(
                 label="📥 PDF 다운로드",
                 data=bytes(pdf.output()),
