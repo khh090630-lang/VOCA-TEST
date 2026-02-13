@@ -51,7 +51,7 @@ st.set_page_config(page_title="Voca Generator", page_icon="📝")
 
 st.sidebar.header("🔐 Admin Access")
 admin_pw = st.sidebar.text_input("관리자 비밀번호", type="password")
-is_admin = (admin_pw == "1234")
+is_admin = (admin_pw == "0486")
 
 menu_options = ["일반 시험지 생성"]
 if is_admin:
