@@ -18,19 +18,19 @@ def get_sheet_url(file_id, sheet_name):
     return f'https://docs.google.com/spreadsheets/d/{file_id}/gviz/tq?tqx=out:csv&sheet={encoded_name}&range=A1:C2001'
 
 class VocaPDF(FPDF):
-    def __init__(self, title_text): # 제목을 인자로 받음
+    def __init__(self, title_text):
         super().__init__()
         self.title_text = title_text
         base_path = os.getcwd()
         font_path = os.path.join(base_path, "NanumGothic.ttf")
         if not os.path.exists(font_path):
-            st.error("폰트 파일이 없습니다.")
+            st.error("폰트 파일(NanumGothic.ttf)이 없습니다. 경로를 확인해주세요.")
             st.stop()
         self.add_font('Nanum', '', font_path, uni=True)
 
     def header(self):
         self.set_font('Nanum', '', 16)
-        self.cell(0, 10, self.title_text, ln=True, align='C') # 설정된 제목 출력
+        self.cell(0, 10, self.title_text, ln=True, align='C')
         self.ln(5)
 
 @st.cache_data(show_spinner="데이터 로드 중...", ttl=5)
@@ -64,10 +64,10 @@ st.title(f"📝 {menu}")
 if "관리자" in menu:
     source_df = get_data(SHEET_ID, SHEET_NAME)
     df = get_data(W_SHEET_ID, WRONG_SHEET_NAME)
-    pdf_title = "Wrong Vocabulary Test" # 관리자용 제목
+    pdf_title = "Wrong Vocabulary Test"
 else:
     df = get_data(SHEET_ID, SHEET_NAME)
-    pdf_title = "English Vocabulary Test" # 일반용 제목
+    pdf_title = "English Vocabulary Test"
 
 try:
     if is_admin and "관리자" in menu:
@@ -100,7 +100,6 @@ try:
                 quiz_items = selected_df.values.tolist()
                 if shuffle: random.shuffle(quiz_items)
 
-                # --- PDF 생성 (pdf_title 전달) ---
                 pdf = VocaPDF(pdf_title)
                 pdf.set_auto_page_break(auto=True, margin=15)
                 pdf.add_page()
@@ -132,7 +131,20 @@ try:
                     if i % 2 == 0: pdf.set_xy(pdf.l_margin, cy + 8)
                     else: pdf.set_xy(cx + col_width + 10, cy)
 
-                st.download_button(label="📥 PDF 다운로드", data=pdf.output(dest="S").encode("latin-1"),
-                                 file_name=f"test_{start_num}_{end_num}.pdf", mime="application/pdf")
+                # --- [중요] 에러 수정 부분: 데이터 타입에 따라 안전하게 bytes로 변환 ---
+                pdf_output = pdf.output(dest="S")
+                if isinstance(pdf_output, str):
+                    final_pdf = pdf_output.encode("latin-1")
+                else:
+                    final_pdf = bytes(pdf_output)
+
+                st.download_button(
+                    label="📥 PDF 다운로드",
+                    data=final_pdf,
+                    file_name=f"test_{start_num}_{end_num}.pdf",
+                    mime="application/pdf"
+                )
+    else:
+        st.warning("데이터가 없습니다. 시트 내용을 확인해주세요.")
 except Exception as e:
     st.error(f"오류: {e}")
